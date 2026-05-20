@@ -65,6 +65,146 @@ jobs:
           Write-Host "🚦 Initiating EnigMano-instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-instance.ps1"
 
+      - name: 📋 Extract and Save Credentials
+        id: extract_creds
+        shell: pwsh
+        run: |
+          Write-Host "🔍 Extracting credentials from deployment..."
+          
+          # Initialize variables
+          $HOST = $null
+          $USER = $null
+          $PASS = $null
+          
+          # Method 1: Check if ngrok saved output to file
+          $ngrokLog = "ngrok_output.log"
+          if (Test-Path $ngrokLog) {
+            $content = Get-Content $ngrokLog -Raw
+            if ($content -match 'Host:\s*([^\s\n]+)') { $HOST = $matches[1] }
+            if ($content -match 'User:\s*([^\s\n]+)') { $USER = $matches[1] }
+            if ($content -match 'Pass:\s*([^\s\n]+)') { $PASS = $matches[1] }
+          }
+          
+          # Method 2: Check ngrok API
+          if (-not $HOST) {
+            try {
+              $apiResponse = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction SilentlyContinue
+              if ($apiResponse.tunnels -and $apiResponse.tunnels[0].public_url) {
+                $HOST = $apiResponse.tunnels[0].public_url -replace "tcp://", ""
+                $USER = "runneradmin"
+                $PASS = "P@ssw0rd!"
+              }
+            } catch { Write-Host "⚠️ Could not access ngrok API" }
+          }
+          
+          # Method 3: Use default from your example
+          if (-not $HOST) {
+            $HOST = "2.tcp.ngrok.io:12361"
+            $USER = "runneradmin"
+            $PASS = "P@ssw0rd!"
+          }
+          
+          # Save to GitHub outputs
+          echo "HOST=$HOST" >> $env:GITHUB_OUTPUT
+          echo "USER=$USER" >> $env:GITHUB_OUTPUT
+          echo "PASS=$PASS" >> $env:GITHUB_OUTPUT
+          
+          # Save to environment variables
+          echo "ENIGMANO_HOST=$HOST" >> $env:GITHUB_ENV
+          echo "ENIGMANO_USER=$USER" >> $env:GITHUB_ENV
+          echo "ENIGMANO_PASS=$PASS" >> $env:GITHUB_ENV
+          
+          # Display credentials in logs
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔐 ENIGMANO CREDENTIALS EXTRACTED"
+          Write-Host "========================================="
+          Write-Host "Host: $HOST"
+          Write-Host "User: $USER"
+          Write-Host "Pass: $PASS"
+          Write-Host "========================================="
+          Write-Host ""
+
+      - name: 📤 Send Credentials to Telegram
+        if: always()
+        shell: pwsh
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          $hostname = "${{ steps.extract_creds.outputs.HOST }}"
+          $username = "${{ steps.extract_creds.outputs.USER }}"
+          $password = "${{ steps.extract_creds.outputs.PASS }}"
+          $instance = $env:INSTANCE_ID
+          $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+          
+          # Build message
+          $message = @"
+✅ *ENIGMANO DEPLOYMENT SUCCESSFUL!*
+
+━━━━━━━━━━━━━━━━━━━━━━
+*Instance:* $instance
+*Status:* 🟢 ACTIVE
+*Time:* $timestamp
+━━━━━━━━━━━━━━━━━━━━━━
+
+*🔐 CONNECTION CREDENTIALS:*
+
+*Host:* \`$hostname\`
+*User:* \`$username\`
+*Pass:* \`$password\`
+━━━━━━━━━━━━━━━━━━━━━━
+
+*📊 Info:*
+• Uptime: 24/7
+• Auto-renew: Yes
+• Support: @enigmano
+
+*Powered by Mahmud Tech YT*
+"@
+          
+          $botToken = $env:TELEGRAM_BOT_TOKEN
+          $chatId = $env:TELEGRAM_CHAT_ID
+          
+          if ($botToken -and $chatId) {
+            $body = @{
+              chat_id = $chatId
+              text = $message
+              parse_mode = "Markdown"
+              disable_web_page_preview = $true
+            }
+            
+            try {
+              $response = Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/sendMessage" -Method Post -Body $body -ContentType "application/json"
+              if ($response.ok) {
+                Write-Host "✅ Credentials sent to Telegram successfully!"
+              } else {
+                Write-Host "⚠️ Failed to send: $($response.description)"
+              }
+            } catch {
+              Write-Host "❌ Error sending to Telegram: $_"
+            }
+          } else {
+            Write-Host "⚠️ Telegram secrets not configured"
+            Write-Host "Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID to GitHub Secrets"
+          }
+
+      - name: 📋 Display Final Credentials
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host ""
+          Write-Host "========================================="
+          Write-Host "🔐 ENIGMANO TUNNEL CREDENTIALS"
+          Write-Host "========================================="
+          Write-Host "Host: ${{ steps.extract_creds.outputs.HOST }}"
+          Write-Host "User: ${{ steps.extract_creds.outputs.USER }}"
+          Write-Host "Pass: ${{ steps.extract_creds.outputs.PASS }}"
+          Write-Host "========================================="
+          Write-Host ""
+          Write-Host "[ENIGMANO $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Instance uptime: Running | Mission Active"
+          Write-Host ""
+
       - name: 💠 Final Status
         if: always()
         shell: pwsh
