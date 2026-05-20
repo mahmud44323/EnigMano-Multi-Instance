@@ -17,8 +17,6 @@ jobs:
       INSTANCE_ID: ${{ github.event.inputs.INSTANCE }}
       SECRET_SHAHZAIB: ${{ secrets.SECRET_SHAHZAIB }}
       NGROK_SHAHZAIB: ${{ secrets.NGROK_SHAHZAIB }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       REPO: ${{ github.repository }}
       WORKFLOW_FILE: "enigmano.yml"
       DEPLOYMENT_ID: ${{ github.run_id }}
@@ -66,100 +64,6 @@ jobs:
         run: |
           Write-Host "🚦 Initiating EnigMano-instance.ps1"
           powershell.exe -ExecutionPolicy Bypass -File ".\EnigMano-instance.ps1"
-
-      - name: 📡 Extract Ngrok Host
-        id: get_host
-        shell: pwsh
-        run: |
-          # Try to extract actual ngrok host from various sources
-          $ngrokHost = "2.tcp.ngrok.io:12361"  # Default fallback
-          
-          # Check ngrok API
-          try {
-            $apiResponse = Invoke-RestMethod -Uri "http://localhost:4040/api/tunnels" -ErrorAction SilentlyContinue
-            if ($apiResponse.tunnels -and $apiResponse.tunnels[0].public_url) {
-              $ngrokHost = $apiResponse.tunnels[0].public_url -replace "tcp://", ""
-              Write-Host "✅ Extracted from ngrok API: $ngrokHost"
-            }
-          } catch {
-            Write-Host "⚠️ Could not access ngrok API, using default"
-          }
-          
-          # Save to environment variable
-          echo "NGROK_HOST=$ngrokHost" >> $env:GITHUB_ENV
-          Write-Host "Host: $ngrokHost"
-
-      - name: 📤 Send to Telegram Bot
-        if: always()
-        shell: pwsh
-        run: |
-          $hostname = $env:NGROK_HOST
-          $instance = $env:INSTANCE_ID
-          $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-          $user = "runneradmin"
-          $pass = "P@ssw0rd!"
-          
-          # Build message
-          $message = @"
-🔐 *ENIGMANO INSTANCE $instance DEPLOYED*
-
-━━━━━━━━━━━━━━━━━━━━━━
-*Host:* \`$hostname\`
-*User:* \`$user\`
-*Pass:* \`$pass\`
-━━━━━━━━━━━━━━━━━━━━━━
-
-*Status:* ✅ ACTIVE
-*Instance:* $instance
-*Time:* $timestamp
-
-[ENIGMANO $timestamp] Instance uptime: Running | Mission Active
-"@
-          
-          # Send to Telegram
-          $botToken = $env:TELEGRAM_BOT_TOKEN
-          $chatId = $env:TELEGRAM_CHAT_ID
-          
-          if ($botToken -and $chatId) {
-            $url = "https://api.telegram.org/bot$botToken/sendMessage"
-            $body = @{
-              chat_id = $chatId
-              text = $message
-              parse_mode = "Markdown"
-              disable_web_page_preview = $true
-            }
-            
-            try {
-              $response = Invoke-RestMethod -Uri $url -Method Post -Body $body -ContentType "application/json"
-              if ($response.ok) {
-                Write-Host "✅ Credentials sent to Telegram successfully!"
-              } else {
-                Write-Host "⚠️ Failed to send: $($response.description)"
-              }
-            } catch {
-              Write-Host "❌ Error sending to Telegram: $_"
-            }
-          } else {
-            Write-Host "⚠️ TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set in secrets"
-            Write-Host "📝 Would have sent:"
-            Write-Host $message
-          }
-
-      - name: 📋 Display Host, User & Pass
-        if: always()
-        shell: pwsh
-        run: |
-          Write-Host ""
-          Write-Host "========================================="
-          Write-Host "🔐 ENIGMANO TUNNEL CREDENTIALS"
-          Write-Host "========================================="
-          Write-Host "Host: $env:NGROK_HOST"
-          Write-Host "User: runneradmin"
-          Write-Host "Pass: P@ssw0rd!"
-          Write-Host "========================================="
-          Write-Host ""
-          Write-Host "[ENIGMANO $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Instance uptime: Running | Mission Active"
-          Write-Host ""
 
       - name: 💠 Final Status
         if: always()
