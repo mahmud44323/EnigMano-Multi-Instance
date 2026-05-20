@@ -104,9 +104,9 @@ jobs:
 🔐 *ENIGMANO INSTANCE $instance DEPLOYED*
 
 ━━━━━━━━━━━━━━━━━━━━━━
-*Host:* `$hostname`
-*User:* `$user`
-*Pass:* `$pass`
+*Host:* \`$hostname\`
+*User:* \`$user\`
+*Pass:* \`$pass\`
 ━━━━━━━━━━━━━━━━━━━━━━
 
 *Status:* ✅ ACTIVE
@@ -115,9 +115,6 @@ jobs:
 
 [ENIGMANO $timestamp] Instance uptime: Running | Mission Active
 "@
-          
-          # URL encode the message
-          $encodedMessage = [System.Web.HttpUtility]::UrlEncode($message)
           
           # Send to Telegram
           $botToken = $env:TELEGRAM_BOT_TOKEN
